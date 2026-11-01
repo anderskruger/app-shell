@@ -1,6 +1,7 @@
 // Synthesises the rest-alert sounds the native notifications play while the phone is locked.
 // Same patterns as the in-app beeps: 1 beep at 1:00, 2 at 1:30, 3 at 2:00, a long low tone at 3:00.
-// Run: node scripts/make-sounds.js  (writes android/app/src/main/res/raw/rest_*.wav)
+// quest_new: Plate Log's quest mode chime (three rising bells) for a quest that arrives while the phone is locked.
+// Run: node scripts/make-sounds.js  (writes android/app/src/main/res/raw/*.wav)
 const fs = require('fs');
 const path = require('path');
 
@@ -11,8 +12,10 @@ function render(notes, total) {
     const s0 = Math.round(at * RATE), len = Math.round(dur * RATE);
     for (let i = 0; i < len && s0 + i < n; i++) {
       const t = i / RATE, ph = (f * t) % 1;
-      const v = wave === 'square' ? (ph < 0.5 ? 1 : -1) : 2 * ph - 1;   // square or sawtooth
-      const env = Math.min(1, i / (0.01 * RATE)) * Math.exp(-4 * t / dur);
+      const v = wave === 'bell'   // a struck bell: a few inharmonic partials
+        ? Math.sin(2 * Math.PI * f * t) + 0.35 * Math.sin(2 * Math.PI * 2.01 * f * t) + 0.12 * Math.sin(2 * Math.PI * 3.02 * f * t)
+        : wave === 'square' ? (ph < 0.5 ? 1 : -1) : 2 * ph - 1;   // square or sawtooth
+      const env = Math.min(1, i / ((wave === 'bell' ? 0.004 : 0.01) * RATE)) * Math.exp(-4 * t / dur);
       out[s0 + i] += v * env * vol;
     }
   }
@@ -33,8 +36,9 @@ const sounds = {
   rest_two:   { total: 0.6, notes: [{ f: 988, at: 0, dur: 0.14 }, { f: 988, at: 0.22, dur: 0.14 }] },
   rest_three: { total: 0.7, notes: [{ f: 1175, at: 0, dur: 0.12 }, { f: 1175, at: 0.18, dur: 0.12 }, { f: 1175, at: 0.36, dur: 0.12 }] },
   rest_long:  { total: 1.3, notes: [{ f: 660, at: 0, dur: 0.35, wave: 'saw' }, { f: 440, at: 0.4, dur: 0.7, wave: 'saw' }] },
+  quest_new:  { total: 2.2, notes: [{ f: 784, at: 0, dur: 1.4, wave: 'bell', vol: 0.24 }, { f: 1175, at: 0.17, dur: 1.8, wave: 'bell', vol: 0.24 }, { f: 1568, at: 0.34, dur: 1.2, wave: 'bell', vol: 0.1 }] },
 };
 const dir = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'res', 'raw');
 fs.mkdirSync(dir, { recursive: true });
 for (const [name, { notes, total }] of Object.entries(sounds)) fs.writeFileSync(path.join(dir, name + '.wav'), wav(render(notes, total)));
-console.log('rest sounds written to', dir);
+console.log('alert sounds written to', dir);

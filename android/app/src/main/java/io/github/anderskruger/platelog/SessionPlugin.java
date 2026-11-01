@@ -19,6 +19,7 @@ import org.json.JSONObject;
 /**
  * window.Capacitor.Plugins.Session: a lock-screen card with a timer and a button (see SessionCard for the state).
  *   show(state)                    start or update the card
+ *   info() -> { version }          3: steps with `at`, `restart`, `waitTitle`/`waitText`
  *   hide()                         remove it, its alerts and anything not yet taken
  *   take() -> { events }           steps completed from the card since the last take: [{ id, data, at }]
  *   cacheSound({ group, name, data (base64) }), listSounds() -> { sounds: ["group/name"] }, pruneSounds({ keep })
@@ -63,7 +64,7 @@ public class SessionPlugin extends Plugin {
             JSONArray kept = new JSONArray();
             for (int i = 0; i < steps.length(); i++) {
                 JSONObject s = steps.optJSONObject(i);
-                if (kept.length() > 0 || !taken.contains(s.optString("id"))) kept.put(s);
+                if (!taken.contains(s.optString("id"))) kept.put(s);
             }
             st.put("steps", kept);
         }
@@ -71,6 +72,15 @@ public class SessionPlugin extends Plugin {
         SessionCard.post(c);
         SessionCard.scheduleAlerts(c);
         call.resolve();
+    }
+
+    /** What this build of the card can do, so a page can tell it apart from older app versions. */
+    @PluginMethod
+    public void info(PluginCall call) {
+        JSObject out = new JSObject();
+        out.put("version", 3);
+        out.put("stepsAt", true);
+        call.resolve(out);
     }
 
     @PluginMethod

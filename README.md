@@ -29,7 +29,9 @@ Inside the app, `window.Capacitor.isNativePlatform()` is true and these are on `
 - `App`: `pause` / `resume` / `backButton` events, `minimizeApp()`
 - `Session`: a lock-screen card with a big count-up timer and a button that works without unlocking
   - `show({ steps: [{ id, title, text, sound, data }], since, label, restLabel, button, doneTitle, doneText, alerts: [{ after, label, title, channel, channelName, sound }], volume, silent })`
-  - the button completes `steps[0]`: restarts the timer, plays a random clip from the `sound` group and remembers `{ id, data, at }`
+  - the button completes the first open step: restarts the timer (unless `restart: false`), plays a random clip from the `sound` group and remembers `{ id, data, at }`
+  - a step with `at` (ms) opens at that time, so a page can plan steps ahead; while none is open the card shows `waitTitle` and `waitText` + the time
+  - `info()` exists from build 3 (`{ version: 3 }`), so a page can tell the card apart from older app versions
   - `take()` returns and clears those (`{ events }`); the `step` event fires when the page is running
   - `alerts` beep at `since + after` seconds while the app is out of sight
   - `cacheSound({ group, name, data })` (base64), `listSounds()`, `pruneSounds({ keep })`, `hide()`

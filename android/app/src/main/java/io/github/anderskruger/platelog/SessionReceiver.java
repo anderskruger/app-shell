@@ -31,19 +31,22 @@ public class SessionReceiver extends BroadcastReceiver {
         JSONObject st = SessionCard.state(c);
         JSONArray steps = st.optJSONArray("steps");
         long now = System.currentTimeMillis();
-        if (!st.optBoolean("active") || steps == null || steps.length() == 0) return;
+        int index = SessionCard.nextIndex(st, now);
+        if (!st.optBoolean("active") || steps == null || index < 0) return;
         if (now - lastStepAt < 1500) return;   // a double tap shouldn't count twice
         lastStepAt = now;
 
-        JSONObject step = steps.optJSONObject(0);
+        JSONObject step = steps.optJSONObject(index);
         JSONObject event = new JSONObject();
         try {
             event.put("id", step.optString("id"));
             event.put("data", step.opt("data"));
             event.put("at", now);
-            st.put("steps", without(steps, 0));
-            st.put("since", now);
-            st.put("label", st.optString("restLabel", "Resting"));
+            st.put("steps", without(steps, index));
+            if (st.optBoolean("restart", true)) {
+                st.put("since", now);
+                st.put("label", st.optString("restLabel", "Resting"));
+            }
         } catch (JSONException e) { return; }
         JSONArray pending = SessionCard.pending(c);
         pending.put(event);

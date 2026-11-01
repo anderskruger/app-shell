@@ -15,10 +15,12 @@ import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
+import android.text.format.DateFormat;
 import android.view.View;
 import android.widget.RemoteViews;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
+import java.util.Date;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -29,8 +31,11 @@ import org.json.JSONObject;
  * alerts keep working after Android stops the app; the page reads back what was done with Session.take().
  *
  * State (set by the page with Session.show):
- *   steps     [{ id, title, text, sound, data }]  what's next, in order; the button completes steps[0]
+ *   steps     [{ id, title, text, sound, data, at }]  what's next, in order; the button completes the first open one
+ *             (a step with `at` opens at that time, e.g. a quest that arrives later)
  *   since     ms timestamp the timer counts up from (0 = no timer yet)
+ *   restart   false: the button doesn't restart the timer (default true)
+ *   waitTitle, waitText  shown while every remaining step opens later: "Next quest" / "arrives at" + time
  *   label     line above the timer ("Resting")
  *   alerts    [{ after (s), label, title, channel, channelName, sound }]  beeps after `since`, only while the app is out of sight
  *   button, doneTitle, doneText, restLabel, volume, silent
@@ -71,15 +76,28 @@ final class SessionCard {
         if (!canNotify(c)) return;
         ensureCardChannel(c);
 
-        JSONArray steps = st.optJSONArray("steps");
-        JSONObject next = steps != null && steps.length() > 0 ? steps.optJSONObject(0) : null;
-        String title = next != null ? next.optString("title") : st.optString("doneTitle", "All done");
-        String text = next != null ? next.optString("text") : st.optString("doneText", "");
+        long now = System.currentTimeMillis();
+        JSONObject next = nextStep(st, now);
+        long upcoming = nextUpcoming(st, now);
+        String title, text;
+        if (next != null) {
+            title = next.optString("title");
+            text = next.optString("text");
+            int more = next.optLong("at", 0) > 0 ? available(st, now) - 1 : 0;
+            if (more > 0) text += " · +" + more + " more";
+        } else if (upcoming > 0) {   // steps that only open later: say when the next one does
+            title = st.optString("waitTitle", "Next");
+            text = st.optString("waitText", "at") + " " + DateFormat.getTimeFormat(c).format(new Date(upcoming));
+        } else {
+            title = st.optString("doneTitle", "All done");
+            text = st.optString("doneText", "");
+        }
         long since = st.optLong("since", 0);
-        String label = next == null ? "Done" : since > 0 ? st.optString("label", "Resting") : "Next up";
+        boolean waiting = next == null && upcoming > 0;
+        String label = next == null && !waiting ? "Done" : since > 0 ? st.optString("label", "Resting") : "Next up";
 
-        RemoteViews small = views(c, R.layout.session_card, st, next, title, text, label, since);
-        RemoteViews big = views(c, R.layout.session_card_big, st, next, title, text, label, since);
+        RemoteViews small = views(c, R.layout.session_card, st, next, waiting, title, text, label, since);
+        RemoteViews big = views(c, R.layout.session_card_big, st, next, waiting, title, text, label, since);
 
         Notification n = new NotificationCompat.Builder(c, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_notify)
@@ -99,20 +117,53 @@ final class SessionCard {
         try { nm.notify(CARD_ID, n); } catch (SecurityException ignored) {}
     }
 
-    private static RemoteViews views(Context c, int layout, JSONObject st, JSONObject next,
+    // A step with `at` (ms) only opens at that time; steps without one are open straight away.
+    static int nextIndex(JSONObject st, long now) {
+        JSONArray steps = st.optJSONArray("steps");
+        if (steps == null) return -1;
+        for (int i = 0; i < steps.length(); i++) if (steps.optJSONObject(i).optLong("at", 0) <= now + 1000) return i;
+        return -1;
+    }
+
+    static JSONObject nextStep(JSONObject st, long now) {
+        int i = nextIndex(st, now);
+        return i < 0 ? null : st.optJSONArray("steps").optJSONObject(i);
+    }
+
+    private static long nextUpcoming(JSONObject st, long now) {
+        JSONArray steps = st.optJSONArray("steps");
+        long soonest = 0;
+        if (steps != null) for (int i = 0; i < steps.length(); i++) {
+            long at = steps.optJSONObject(i).optLong("at", 0);
+            if (at > now + 1000 && (soonest == 0 || at < soonest)) soonest = at;
+        }
+        return soonest;
+    }
+
+    private static int available(JSONObject st, long now) {
+        JSONArray steps = st.optJSONArray("steps");
+        int n = 0;
+        if (steps != null) for (int i = 0; i < steps.length(); i++) {
+            long at = steps.optJSONObject(i).optLong("at", 0);
+            if (at > 0 && at <= now + 1000) n++;
+        }
+        return n;
+    }
+
+    private static RemoteViews views(Context c, int layout, JSONObject st, JSONObject next, boolean waiting,
                                      String title, String text, String label, long since) {
         RemoteViews v = new RemoteViews(c.getPackageName(), layout);
         v.setTextViewText(R.id.session_title, title);
         v.setTextViewText(R.id.session_text, text);
         v.setTextViewText(R.id.session_label, label);
-        if (since > 0 && next != null) {
+        if (since > 0 && (next != null || waiting)) {
             // Chronometer counts on elapsedRealtime; the system keeps it ticking, so nothing here has to run.
             long base = SystemClock.elapsedRealtime() - (System.currentTimeMillis() - since);
             v.setChronometer(R.id.session_clock, base, null, true);
             v.setViewVisibility(R.id.session_clock, View.VISIBLE);
             v.setViewVisibility(R.id.session_clock_text, View.GONE);
         } else {
-            v.setTextViewText(R.id.session_clock_text, next == null ? "✓" : "Go");
+            v.setTextViewText(R.id.session_clock_text, waiting ? "…" : next == null ? "✓" : "Go");
             v.setViewVisibility(R.id.session_clock, View.GONE);
             v.setViewVisibility(R.id.session_clock_text, View.VISIBLE);
         }
@@ -181,8 +232,7 @@ final class SessionCard {
                 nm.createNotificationChannel(ch);
             }
         }
-        JSONArray steps = st.optJSONArray("steps");
-        JSONObject next = steps != null && steps.length() > 0 ? steps.optJSONObject(0) : null;
+        JSONObject next = nextStep(st, System.currentTimeMillis());
         String body = next != null ? next.optString("title") + " · " + next.optString("text") : st.optString("doneText", "");
         Notification n = new NotificationCompat.Builder(c, channel)
             .setSmallIcon(R.drawable.ic_stat_notify)
