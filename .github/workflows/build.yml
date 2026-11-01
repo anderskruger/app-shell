@@ -1,0 +1,81 @@
+# Builds one signed APK per folder in apps/ and publishes each to its own "<app>-latest" release,
+# so the download link for an app never changes:
+#   https://github.com/<owner>/app-shell/releases/download/<app>-latest/<app>.apk
+name: Build Android apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.apps.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: apps
+        run: echo "apps=$(ls apps | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: list
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.list.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Point the shell at ${{ matrix.app }}
+        run: |
+          node scripts/configure.js "${{ matrix.app }}"
+          npx cap sync android
+          node scripts/configure.js "${{ matrix.app }}" --android
+          node scripts/make-sounds.js
+          BG=$(jq -r .backgroundColor "apps/${{ matrix.app }}/app.json")
+          npx @capacitor/assets generate --android --assetPath "apps/${{ matrix.app }}" \
+            --iconBackgroundColor "$BG" --iconBackgroundColorDark "$BG" \
+            --splashBackgroundColor "$BG" --splashBackgroundColorDark "$BG"
+
+      - name: Build signed APK
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+        run: |
+          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          export SIGNING_KEYSTORE="$RUNNER_TEMP/release.jks"
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/${{ matrix.app }}.apk"
+
+      - name: Publish the ${{ matrix.app }}-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ matrix.app }}-latest"
+          NAME=$(jq -r .appName "apps/${{ matrix.app }}/app.json")
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" "$RUNNER_TEMP/${{ matrix.app }}.apk" \
+            --title "$NAME (Android) build ${{ github.run_number }}" \
+            --notes "Install on your phone: open this page in Chrome, tap ${{ matrix.app }}.apk, then open the download. Updates install over the previous version and keep your data." \
+            --latest=false

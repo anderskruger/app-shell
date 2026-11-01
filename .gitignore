@@ -1,0 +1,6 @@
+node_modules/
+# generated per app by scripts/configure.js
+www/index.html
+# signing keys never go in the repo
+*.jks
+*.keystore

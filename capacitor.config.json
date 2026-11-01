@@ -1,0 +1,19 @@
+{
+  "appId": "io.github.anderskruger.platelog",
+  "appName": "Plate Log",
+  "webDir": "www",
+  "backgroundColor": "#14161b",
+  "server": {
+    "url": "https://anderskruger.github.io/plate-log/",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_notify",
+      "iconColor": "#f3c233"
+    }
+  }
+}
