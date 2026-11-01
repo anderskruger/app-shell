@@ -20,6 +20,9 @@
             </intent-filter>
         </activity>
 
+        <!-- the lock-screen card's button and its timed alerts -->
+        <receiver android:name=".SessionReceiver" android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
