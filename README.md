@@ -27,6 +27,13 @@ Inside the app, `window.Capacitor.isNativePlatform()` is true and these are on `
 - `LocalNotifications`: schedule notifications; channels can use the bundled sounds `rest_one`, `rest_two`, `rest_three`, `rest_long`
 - `KeepAwake`: `keepAwake()` / `allowSleep()`
 - `App`: `pause` / `resume` / `backButton` events, `minimizeApp()`
+- `Session`: a lock-screen card with a big count-up timer and a button that works without unlocking
+  - `show({ steps: [{ id, title, text, sound, data }], since, label, restLabel, button, doneTitle, doneText, alerts: [{ after, label, title, channel, channelName, sound }], volume, silent })`
+  - the button completes `steps[0]`: restarts the timer, plays a random clip from the `sound` group and remembers `{ id, data, at }`
+  - `take()` returns and clears those (`{ events }`); the `step` event fires when the page is running
+  - `alerts` beep at `since + after` seconds while the app is out of sight
+  - `cacheSound({ group, name, data })` (base64), `listSounds()`, `pruneSounds({ keep })`, `hide()`
+  - see `SessionCard.java` for the details
 
 In a normal browser `window.Capacitor` doesn't exist, so the page should treat all of this as optional.
 
