@@ -16,7 +16,8 @@ the next time it opens; this repo only needs a new build when the shell itself c
 ## Adding an app
 
 1. Make a folder `apps/<name>/` with:
-   - `app.json`: `appId` (unique, e.g. `io.github.anderskruger.<name>`), `appName`, `url`, `backgroundColor`
+   - `app.json`: `appId` (unique, e.g. `io.github.anderskruger.<name>`), `appName`, `url`, `backgroundColor`, and optionally `scheme`
+     (links like `<scheme>://anything` open the app; the page gets them from `App.getLaunchUrl()` and the `appUrlOpen` event)
    - `icon-only.png`: 1024×1024 launcher icon, artwork inside the middle ~60% (Android crops to a circle or squircle)
 2. Push. GitHub Actions builds every app and publishes `<name>.apk` to the `<name>-latest` release.
 

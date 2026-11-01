@@ -40,6 +40,7 @@ fs.writeFileSync(gradle, g);
 const strings = path.join(root, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml');
 let s = fs.readFileSync(strings, 'utf8');
 s = s.replace(/(<string name="app_name">)[^<]*/, `$1${app.appName}`)
-     .replace(/(<string name="title_activity_main">)[^<]*/, `$1${app.appName}`);
+     .replace(/(<string name="title_activity_main">)[^<]*/, `$1${app.appName}`)
+     .replace(/(<string name="custom_url_scheme">)[^<]*/, `$1${app.scheme || app.appId}`);   // <scheme>:// links open the app
 fs.writeFileSync(strings, s);
 console.log(`android project stamped: ${app.appId} v1.${run}`);
